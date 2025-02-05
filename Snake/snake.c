@@ -13,7 +13,7 @@ enum
     UP,
     RIGHT,
     DOWN,
-    STOP_GAME = KEY_F(10)
+    STOP_GAME = KEY_F(10),
 };
 enum
 {
@@ -60,12 +60,17 @@ typedef struct tail_t
     int y;
 } tail_t;
 
-void initTail(struct tail_t t[], size_t size)
+void initTail(struct tail_t t[], size_t size, int head_x, int head_y)
 {
     struct tail_t init_t = {0, 0};
     for (size_t i = 0; i < size; i++)
     {
         t[i] = init_t;
+    }
+    for (size_t i = 0; i < START_TAIL_SIZE; i++)
+    {
+        t[i].x = head_x - i;
+        t[i].y = head_y;
     }
 }
 void initHead(struct snake_t *head, int x, int y)
@@ -78,16 +83,16 @@ void initHead(struct snake_t *head, int x, int y)
 void initSnake(snake_t *head, size_t size, int x, int y)
 {
     tail_t *tail = (tail_t *)malloc(MAX_TAIL_SIZE * sizeof(tail_t));
-    initTail(tail, MAX_TAIL_SIZE);
+    initTail(tail, MAX_TAIL_SIZE, x, y);
     initHead(head, x, y);
     head->tail = tail; // прикрепляем к голове хвост
     head->tsize = size + 1;
     head->controls = default_controls;
 }
 
-int checkCollision(struct snake_t *head)
+int checkTailCollision(struct snake_t *head)
 {
-    for (int i = 0; i < head->tsize; i++)
+    for (int i = 1; i < head->tsize; i++)
     {
         if (head->x == head->tail[i].x && head->y == head->tail[i].y)
         {
@@ -120,13 +125,13 @@ void go(struct snake_t *head)
         mvprintw(head->y, ++(head->x), "%c", ch);
         break;
     case UP:
-        if (head->y <= 0)
+        if (head->y <= MIN_Y)
             head->y = max_y;
         mvprintw(--(head->y), head->x, "%c", ch);
         break;
     case DOWN:
         if (head->y >= max_y)
-            head->y = 0;
+            head->y = MIN_Y;
         mvprintw(++(head->y), head->x, "%c", ch);
         break;
     default:
@@ -167,10 +172,10 @@ void goTail(struct snake_t *head)
 int main()
 {
     snake_t *snake = (snake_t *)malloc(sizeof(snake_t));
-    initSnake(snake, START_TAIL_SIZE, 10, 10);
+    initSnake(snake, START_TAIL_SIZE, 20, 10);
     initscr();
     keypad(stdscr, TRUE); // Включаем F1, F2, стрелки и т.д.
-    raw();                // Откдючаем line buffering
+    raw();                // Отключаем line buffering
     noecho();             // Отключаем echo() режим при вызове getch
     curs_set(FALSE);      // Отключаем курсор
     mvprintw(0, 0, "Use arrows for control. Press 'F10' for EXIT");
@@ -179,11 +184,22 @@ int main()
     while (key_pressed != STOP_GAME)
     {
         key_pressed = getch(); // Считываем клавишу
+        if(key_pressed == 'p') {
+            key_pressed = 0;
+            mvprintw(1, 0, "Pause");
+            while(key_pressed != 'p') {
+                key_pressed = getch();
+            };
+            mvprintw(1, 0, "     ");
+        }
         go(snake);
         goTail(snake);
-        if(checkCollision(snake)) 
+        if (checkTailCollision(snake))
         {
-            // break;
+            mvprintw(1, 0, "Game over");
+            while(key_pressed != STOP_GAME) {
+                key_pressed = getch();
+            };
         }
         timeout(100); // Задержка при отрисовке
         changeDirection(snake, key_pressed);
