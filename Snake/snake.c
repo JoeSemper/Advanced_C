@@ -140,16 +140,46 @@ void go(struct snake_t *head)
     refresh();
 }
 
+int checkDirection(snake_t *snake, int32_t key)
+{
+    switch (snake->direction)
+    {
+    case LEFT:
+        if (key == snake->controls.right)
+            return 0;
+        break;
+    case RIGHT:
+        if (key == snake->controls.left)
+            return 0;
+        break;
+    case UP:
+        if (key == snake->controls.down)
+            return 0;
+        break;
+    case DOWN:
+        if (key == snake->controls.up)
+            return 0;
+        break;
+    default:
+        return 1;
+    }
+
+    return 1;
+}
+
 void changeDirection(struct snake_t *snake, const int32_t key)
 {
-    if (key == snake->controls.down)
-        snake->direction = DOWN;
-    else if (key == snake->controls.up)
-        snake->direction = UP;
-    else if (key == snake->controls.right)
-        snake->direction = RIGHT;
-    else if (key == snake->controls.left)
-        snake->direction = LEFT;
+    if (checkDirection(snake, key))
+    {
+        if (key == snake->controls.down)
+            snake->direction = DOWN;
+        else if (key == snake->controls.up)
+            snake->direction = UP;
+        else if (key == snake->controls.right)
+            snake->direction = RIGHT;
+        else if (key == snake->controls.left)
+            snake->direction = LEFT;
+    }
 }
 
 /*
@@ -184,10 +214,12 @@ int main()
     while (key_pressed != STOP_GAME)
     {
         key_pressed = getch(); // Считываем клавишу
-        if(key_pressed == 'p') {
+        if (key_pressed == 'p')
+        {
             key_pressed = 0;
             mvprintw(1, 0, "Pause");
-            while(key_pressed != 'p') {
+            while (key_pressed != 'p')
+            {
                 key_pressed = getch();
             };
             mvprintw(1, 0, "     ");
@@ -197,7 +229,8 @@ int main()
         if (checkTailCollision(snake))
         {
             mvprintw(1, 0, "Game over");
-            while(key_pressed != STOP_GAME) {
+            while (key_pressed != STOP_GAME)
+            {
                 key_pressed = getch();
             };
         }
