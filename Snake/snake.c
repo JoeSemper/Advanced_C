@@ -7,6 +7,7 @@
 #include <unistd.h>
 
 #define MIN_Y 2
+#define N_CONTROLS 12
 enum
 {
     LEFT = 1,
@@ -14,6 +15,7 @@ enum
     RIGHT,
     DOWN,
     STOP_GAME = KEY_F(10),
+    PAUSE = KEY_F(9),
 };
 enum
 {
@@ -23,16 +25,22 @@ enum
     FOOD_EXPIRE_SECONDS = 10
 };
 
-// Здесь храним коды управления змейкой
-struct control_buttons
-{
-    int down;
-    int up;
-    int left;
-    int right;
-} control_buttons;
+// // Здесь храним коды управления змейкой
+// struct control_buttons
+// {
+//     int down[N_CONTROLS];
+//     int up[N_CONTROLS];
+//     int left[N_CONTROLS];
+//     int right[N_CONTROLS];
+// } control_buttons;
 
-struct control_buttons default_controls = {KEY_DOWN, KEY_UP, KEY_LEFT, KEY_RIGHT};
+// struct control_buttons default_controls = {
+//     {KEY_DOWN, 'S', 's'},
+//     {KEY_UP, 'W', 'w'},
+//     {KEY_LEFT, 'A', 'a'},
+//     {KEY_RIGHT, 'D', 'd'}};
+
+int default_controls[N_CONTROLS] = {KEY_LEFT, 'A', 'a', KEY_UP, 'W', 'w', KEY_RIGHT, 'D', 'd', KEY_DOWN, 'S', 's'};
 
 /*
  Голова змейки содержит в себе
@@ -48,7 +56,7 @@ typedef struct snake_t
     int direction;
     size_t tsize;
     struct tail_t *tail;
-    struct control_buttons controls;
+    int *controls;
 } snake_t;
 
 /*
@@ -90,19 +98,6 @@ void initSnake(snake_t *head, size_t size, int x, int y)
     head->controls = default_controls;
 }
 
-int checkTailCollision(struct snake_t *head)
-{
-    for (int i = 1; i < head->tsize; i++)
-    {
-        if (head->x == head->tail[i].x && head->y == head->tail[i].y)
-        {
-            return 1;
-        }
-    }
-
-    return 0;
-}
-
 /*
  Движение головы с учетом текущего направления движения
  */
@@ -140,45 +135,66 @@ void go(struct snake_t *head)
     refresh();
 }
 
+int getDirection(int32_t key, int *control_buttons)
+{
+    for (int i = 0; i < N_CONTROLS; i++)
+    {
+        if (key == control_buttons[i])
+        {
+            switch (i / 3 + 1)
+            {
+            case 1:
+                return LEFT;
+                break;
+            case 2:
+                return UP;
+                break;
+            case 3:
+                return RIGHT;
+                break;
+            case 4:
+                return DOWN;
+                break;
+            default:
+                break;
+            }
+        }
+    }
+    return 0;
+}
+
 int checkDirection(snake_t *snake, int32_t key)
 {
+    int new_direction = getDirection(key, snake->controls);
+
     switch (snake->direction)
     {
     case LEFT:
-        if (key == snake->controls.right)
+        if (new_direction == RIGHT)
             return 0;
         break;
     case RIGHT:
-        if (key == snake->controls.left)
+        if (new_direction == LEFT)
             return 0;
         break;
     case UP:
-        if (key == snake->controls.down)
+        if (new_direction == DOWN)
             return 0;
         break;
     case DOWN:
-        if (key == snake->controls.up)
+        if (new_direction == UP)
             return 0;
         break;
     default:
         return 1;
     }
-
-    return 1;
 }
 
 void changeDirection(struct snake_t *snake, const int32_t key)
 {
-    if (checkDirection(snake, key))
+    if (checkDirection(snake, key) && getDirection(key, snake->controls))
     {
-        if (key == snake->controls.down)
-            snake->direction = DOWN;
-        else if (key == snake->controls.up)
-            snake->direction = UP;
-        else if (key == snake->controls.right)
-            snake->direction = RIGHT;
-        else if (key == snake->controls.left)
-            snake->direction = LEFT;
+        snake->direction = getDirection(key, snake->controls);
     }
 }
 
@@ -199,6 +215,31 @@ void goTail(struct snake_t *head)
     head->tail[0].y = head->y;
 }
 
+void pause(int *key_pressed)
+{
+    *key_pressed = 0;
+    mvprintw(1, 0, "Pause");
+    while (*key_pressed != PAUSE)
+    {
+        *key_pressed = getch();
+    };
+    mvprintw(1, 0, "     ");
+}
+
+int checkTailCollision(struct snake_t *snake)
+{
+
+    for (int i = 1; i < snake->tsize; i++)
+    {
+        if (snake->x == snake->tail[i].x && snake->y == snake->tail[i].y)
+        {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+
 int main()
 {
     snake_t *snake = (snake_t *)malloc(sizeof(snake_t));
@@ -208,21 +249,15 @@ int main()
     raw();                // Отключаем line buffering
     noecho();             // Отключаем echo() режим при вызове getch
     curs_set(FALSE);      // Отключаем курсор
-    mvprintw(0, 0, "Use arrows for control. Press 'F10' for EXIT");
+    mvprintw(0, 0, "Use arrows for control. Press 'F10' for EXIT. Press 'F9' to PAUSE");
     timeout(0); // Отключаем таймаут после нажатия клавиши в цикле
     int key_pressed = 0;
     while (key_pressed != STOP_GAME)
     {
         key_pressed = getch(); // Считываем клавишу
-        if (key_pressed == 'p')
+        if (key_pressed == PAUSE)
         {
-            key_pressed = 0;
-            mvprintw(1, 0, "Pause");
-            while (key_pressed != 'p')
-            {
-                key_pressed = getch();
-            };
-            mvprintw(1, 0, "     ");
+            pause(&key_pressed);
         }
         go(snake);
         goTail(snake);
