@@ -8,6 +8,8 @@
 
 #define MIN_Y 2
 #define N_CONTROLS 12
+double DELAY = 0.1;
+
 enum
 {
     LEFT = 1,
@@ -20,25 +22,11 @@ enum
 enum
 {
     MAX_TAIL_SIZE = 100,
-    START_TAIL_SIZE = 15,
+    START_TAIL_SIZE = 3,
     MAX_FOOD_SIZE = 20,
-    FOOD_EXPIRE_SECONDS = 10
+    FOOD_EXPIRE_SECONDS = 10,
+    SEED_NUMBER = 3
 };
-
-// // Здесь храним коды управления змейкой
-// struct control_buttons
-// {
-//     int down[N_CONTROLS];
-//     int up[N_CONTROLS];
-//     int left[N_CONTROLS];
-//     int right[N_CONTROLS];
-// } control_buttons;
-
-// struct control_buttons default_controls = {
-//     {KEY_DOWN, 'S', 's'},
-//     {KEY_UP, 'W', 'w'},
-//     {KEY_LEFT, 'A', 'a'},
-//     {KEY_RIGHT, 'D', 'd'}};
 
 int default_controls[N_CONTROLS] = {KEY_LEFT, 'A', 'a', KEY_UP, 'W', 'w', KEY_RIGHT, 'D', 'd', KEY_DOWN, 'S', 's'};
 
@@ -67,6 +55,79 @@ typedef struct tail_t
     int x;
     int y;
 } tail_t;
+
+struct food
+{
+    int x;
+    int y;
+    time_t put_time;
+    char point;
+    uint8_t enable;
+} food[MAX_FOOD_SIZE];
+
+void initFood(struct food f[], size_t size)
+{
+    struct food init = {0, 0, 0, 0, 0};
+    for (size_t i = 0; i < size; i++)
+    {
+        f[i] = init;
+    }
+}
+
+int getRandX()
+{
+    int max_x = 0, max_y = 0;
+    getmaxyx(stdscr, max_y, max_x);
+    return rand() % (max_x - 1);
+}
+
+int getRandY()
+{
+    int max_x = 0, max_y = 0;
+    getmaxyx(stdscr, max_y, max_x);
+    return rand() % (max_y - 2) + 1;
+}
+
+/*
+ Обновить/разместить текущее зерно на поле
+ */
+void putFoodSeed(struct food *fp)
+{
+    char spoint[2] = {0};
+    mvprintw(fp->y, fp->x, " ");
+    fp->x = getRandX();
+    fp->y = getRandY(); // Не занимаем верхнюю строку
+    fp->put_time = time(NULL);
+    fp->point = '$';
+    fp->enable = 1;
+    spoint[0] = fp->point;
+    mvprintw(fp->y, fp->x, "%s", spoint);
+}
+
+/*
+ Разместить еду на поле
+ */
+void putFood(struct food f[], size_t number_seeds)
+{
+    for (size_t i = 0; i < number_seeds; i++)
+    {
+        putFoodSeed(&f[i]);
+    }
+}
+
+void refreshFood(struct food f[], int nfood)
+{
+    for (size_t i = 0; i < nfood; i++)
+    {
+        if (f[i].put_time)
+        {
+            if (!f[i].enable || (time(NULL) - f[i].put_time) > FOOD_EXPIRE_SECONDS)
+            {
+                putFoodSeed(&f[i]);
+            }
+        }
+    }
+}
 
 void initTail(struct tail_t t[], size_t size, int head_x, int head_y)
 {
@@ -215,6 +276,29 @@ void goTail(struct snake_t *head)
     head->tail[0].y = head->y;
 }
 
+_Bool haveEat(struct snake_t *head, struct food f[])
+{
+    for (int i = 0; i < MAX_FOOD_SIZE; i++)
+    {
+        if (head->x == f[i].x && head->y == f[i].y)
+        {
+            f[i].enable = 0;
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
+/*
+ Увеличение хвоста на 1 элемент
+ */
+
+void addTail(struct snake_t *head)
+{
+    head->tsize++;
+}
+
 void pause(int *key_pressed)
 {
     *key_pressed = 0;
@@ -239,6 +323,44 @@ int checkTailCollision(struct snake_t *snake)
     return 0;
 }
 
+void repairSeed(struct food f[], size_t nfood, struct snake_t *head)
+{
+    for (size_t i = 0; i < head->tsize; i++)
+        for (size_t j = 0; j < nfood; j++)
+        {
+            while (head->tail[i].x == f[j].x && head->tail[i].y == f[j].y)
+            {
+                f[j].x = getRandX();
+                f[j].y = getRandY();
+            }
+        }
+    for (size_t i = 0; i < nfood; i++)
+        for (size_t j = 0; j < nfood; j++)
+        {
+            while (i != j && f[i].x == f[j].x && f[i].y == f[j].y)
+            {
+                f[j].x = getRandX();
+                f[j].y = getRandY();
+            }
+        }
+}
+
+void update(struct snake_t *head, struct food f[], const int32_t key)
+{
+    clock_t begin = clock();
+    go(head);
+    goTail(head);
+    changeDirection(head, key);
+    refreshFood(food, SEED_NUMBER); // Обновляем еду
+    if (haveEat(head, food))
+    {
+        addTail(head);
+    }
+    refresh(); // Обновление экрана, вывели кадр анимации
+    while ((double)(clock() - begin) / CLOCKS_PER_SEC < DELAY)
+    {
+    }
+}
 
 int main()
 {
@@ -251,16 +373,20 @@ int main()
     curs_set(FALSE);      // Отключаем курсор
     mvprintw(0, 0, "Use arrows for control. Press 'F10' for EXIT. Press 'F9' to PAUSE");
     timeout(0); // Отключаем таймаут после нажатия клавиши в цикле
+    initFood(food, MAX_FOOD_SIZE);
+    putFood(food, SEED_NUMBER); // Кладем зерна
     int key_pressed = 0;
+
     while (key_pressed != STOP_GAME)
     {
         key_pressed = getch(); // Считываем клавишу
+
         if (key_pressed == PAUSE)
-        {
             pause(&key_pressed);
-        }
-        go(snake);
-        goTail(snake);
+
+        update(snake, food, key_pressed);
+        repairSeed(food, SEED_NUMBER, snake);
+
         if (checkTailCollision(snake))
         {
             mvprintw(1, 0, "Game over");
@@ -269,9 +395,8 @@ int main()
                 key_pressed = getch();
             };
         }
-        timeout(100); // Задержка при отрисовке
-        changeDirection(snake, key_pressed);
     }
+
     free(snake->tail);
     free(snake);
     endwin(); // Завершаем режим curses mod
